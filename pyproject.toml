@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reelgate"
+version = "0.2.0"
+description = "Broadcast and vertical video quality gate for H.264/AAC MP4 containers, ITU-R BS.1770-4 loudness, and SHA-256 asset deduplication."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Arian Abdi"}
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "imageio-ffmpeg>=0.4.9",
+]
+
+[project.scripts]
+reelgate = "reelgate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
