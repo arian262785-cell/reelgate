@@ -1,0 +1,21 @@
+{
+  "allowed_resolutions": [
+    [1080, 1920],
+    [720, 1280]
+  ],
+  "allowed_video_codecs": [
+    "h264",
+    "avc1"
+  ],
+  "required_pixel_format": "yuv420p",
+  "require_faststart": true,
+  "min_fps": 23.9,
+  "max_fps": 60.1,
+  "min_duration_sec": 1.0,
+  "max_duration_sec": 180.0,
+  "target_lufs": -15.0,
+  "lufs_tolerance_db": 2.5,
+  "max_true_peak_dbtp": -0.5,
+  "max_silence_gap_sec": 2.0,
+  "silence_threshold_dbfs": -55.0
+}
