@@ -1,0 +1,61 @@
+{
+  "made_for_kids": false,
+  "min_duration_sec": 10.0,
+  "max_duration_sec": 60.0,
+  "max_hashtags": 15,
+  "blocked_terms": [
+    "gun",
+    "weapon",
+    "shoot",
+    "kill",
+    "murder",
+    "suicide",
+    "self-harm",
+    "terror",
+    "bomb"
+  ],
+  "kids_blocked_terms": [
+    "gun",
+    "weapon",
+    "blood",
+    "horror",
+    "scary",
+    "gambling",
+    "casino",
+    "alcohol",
+    "kauf jetzt",
+    "jetzt kaufen",
+    "buy now",
+    "rabattcode",
+    "link in bio"
+  ],
+  "forbid_links_for_kids": true,
+  "commercial_triggers": [
+    "affiliate",
+    "rabattcode",
+    "gutscheincode",
+    "promo code",
+    "utm_source=",
+    "ref=",
+    "amzn.to/"
+  ],
+  "disclosure_markers": [
+    "anzeige",
+    "werbung",
+    "#anzeige",
+    "#werbung",
+    "#ad",
+    "#sponsored"
+  ],
+  "require_synthetic_disclosure": true,
+  "min_remix_commentary_words": 15,
+  "min_remix_source_clips": 3,
+  "blocked_domains": [],
+  "require_imprint_reference": false,
+  "imprint_markers": [
+    "impressum",
+    "ddg",
+    "kontakt:",
+    "inhaber"
+  ]
+}

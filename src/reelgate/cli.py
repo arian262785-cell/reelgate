@@ -7,6 +7,12 @@ import json
 from pathlib import Path
 import sys
 
+from .compliance import (
+    CompliancePolicy,
+    evaluate_compliance,
+    load_compliance_policy,
+    load_submission_metadata,
+)
 from .inspector import inspect_media_file, resolve_ffmpeg_binary
 from .ledger import AssetLedger, DuplicateAssetError
 from .normalizer import normalize_media_file
@@ -17,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Create the argument parser for the reelgate CLI."""
     parser = argparse.ArgumentParser(
         prog="reelgate",
-        description="Broadcast and vertical video quality gate (H.264, yuv420p, faststart, ITU-R BS.1770-4 LUFS, SHA-256 ledger).",
+        description="Broadcast, vertical video, and regulatory compliance gate (H.264, yuv420p, faststart, ITU-R BS.1770-4 LUFS, COPPA/UWG/UrhG/AI-Act compliance, SHA-256 ledger).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -30,6 +36,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("input", help="Path to the MP4 file to inspect.")
     p_check.add_argument("--policy", help="Optional path to a GatePolicy JSON file.")
     p_check.add_argument("--report", help="Optional path to write the JSON inspection report.")
+
+    p_comp = sub.add_parser(
+        "compliance",
+        help="Evaluate a submission metadata JSON file against legal and platform compliance rules.",
+    )
+    p_comp.add_argument("metadata", help="Path to the submission metadata JSON file.")
+    p_comp.add_argument("--policy", help="Optional path to a CompliancePolicy JSON file.")
+    p_comp.add_argument("--video", help="Optional MP4 file path to extract actual duration_sec.")
+    p_comp.add_argument("--report", help="Optional path to write the JSON compliance report.")
 
     p_fix = sub.add_parser("fix", help="Remaster an MP4 file to comply with a GatePolicy.")
     p_fix.add_argument("input", help="Path to the source MP4 file.")
@@ -79,6 +94,24 @@ def main(argv: list[str] | None = None) -> int:
             rp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(payload, indent=2))
         return 0 if report.passed else 2
+
+    if args.command == "compliance":
+        c_policy = load_compliance_policy(args.policy) if args.policy else CompliancePolicy()
+        sub_meta = load_submission_metadata(args.metadata)
+        if args.video:
+            probe_rep = inspect_media_file(args.video)
+            raw_dict = json.loads(Path(args.metadata).read_text(encoding="utf-8"))
+            raw_dict["duration_sec"] = probe_rep.duration_sec
+            from .compliance import SubmissionMetadata
+            sub_meta = SubmissionMetadata.from_dict(raw_dict)
+        c_report = evaluate_compliance(sub_meta, policy=c_policy)
+        payload = c_report.to_dict()
+        if args.report:
+            rp = Path(args.report)
+            rp.parent.mkdir(parents=True, exist_ok=True)
+            rp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(payload, indent=2))
+        return 0 if c_report.passed else 2
 
     if args.command == "fix":
         policy = load_policy(args.policy) if args.policy else GatePolicy()
