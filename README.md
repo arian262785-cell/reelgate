@@ -1,6 +1,6 @@
 # reelgate
 
-`reelgate` is a command-line broadcast and vertical video quality gate (`1080x1920` / `720x1280`, H.264 `avc1`, `yuv420p` BT.709). It inspects ISO/IEC 14496-12 MP4 box headers (`moov` before `mdat` faststart placement), measures integrated loudness (`LUFS`), 4x oversampled true peak (`dBTP`), and silence gaps according to ITU-R BS.1770-4 / EBU R128, remasters non-compliant streams over FFmpeg pipes, and tracks SHA-256 asset digests in SQLite.
+`reelgate` is a command-line broadcast, vertical video, and regulatory compliance gate (`1080x1920` / `720x1280`, H.264 `avc1`, `yuv420p` BT.709). It inspects ISO/IEC 14496-12 MP4 box headers (`moov` before `mdat` faststart placement), measures integrated loudness (`LUFS`), 4x oversampled true peak (`dBTP`), and silence gaps according to ITU-R BS.1770-4 / EBU R128, evaluates editorial and legal compliance rules (youth protection / COPPA / JMStV `made_for_kids`, advertising disclosure, synthetic media labeling, transformative remix checks, and title deduplication), remasters non-compliant streams over FFmpeg pipes, and tracks SHA-256 asset digests in SQLite.
 
 ## Package Layout
 
@@ -12,10 +12,12 @@ src/reelgate/
   loudness.py    # ITU-R BS.1770-4 K-weighting cascade, gated LUFS, 4x true peak
   inspector.py   # FFmpeg stream probing, PCM decoding, and policy evaluation
   normalizer.py  # H.264 yuv420p BT.709 faststart remastering and loudness trim
+  compliance.py  # Youth protection, advertising disclosure, AI labeling, and remix compliance
   ledger.py      # SQLite SHA-256 asset and source clip deduplication ledger
-  cli.py         # CLI entry point (init-policy, check, fix, ledger, probe)
+  cli.py         # CLI entry point (init-policy, check, compliance, fix, ledger, probe)
 examples/
   broadcast_9x16_policy.json
+  compliance_policy.json
 tests/
   test_reelgate.py
 ```
@@ -36,10 +38,16 @@ Generate a starter JSON policy file:
 reelgate init-policy policy.json --target-lufs -15.0 --max-true-peak -0.5
 ```
 
-Inspect an MP4 file against a policy (exits `0` on pass, `2` on policy violation):
+Inspect an MP4 file against a broadcast policy (exits `0` on pass, `2` on policy violation):
 
 ```bash
 reelgate check input.mp4 --policy examples/broadcast_9x16_policy.json --report report.json
+```
+
+Evaluate a submission metadata JSON file against legal and editorial compliance rules:
+
+```bash
+reelgate compliance submission.json --policy examples/compliance_policy.json --video input.mp4
 ```
 
 Remaster a non-compliant MP4 file to `yuv420p` BT.709 (`-g 60 -bf 2 -aq-mode 3 +faststart`) and target loudness:

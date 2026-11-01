@@ -12,8 +12,11 @@ import numpy as np
 
 from reelgate import (
     AssetLedger,
+    CompliancePolicy,
     DuplicateAssetError,
     GatePolicy,
+    SubmissionMetadata,
+    evaluate_compliance,
     has_faststart_moov,
     inspect_media_file,
     load_policy,
@@ -44,7 +47,6 @@ class TestReelGate(unittest.TestCase):
         faststart: bool = True,
         sine_amp: float = 0.25,
     ) -> Path:
-        movflags = ["+faststart"] if faststart else ["default_base_moof"]
         cmd = [
             self.ffmpeg,
             "-nostdin",
@@ -135,6 +137,84 @@ class TestReelGate(unittest.TestCase):
             ledger.register_file(sample, asset_role="master", channel_tag="ch1")
         self.assertEqual(len(ledger.list_entries("ch1")), 1)
 
+    def test_compliance_kids_safety_and_deduplication(self) -> None:
+        policy = CompliancePolicy(made_for_kids=True)
+        clean_kids = SubmissionMetadata(
+            title="Die Tierfreunde im Wald",
+            caption="Wir lernen die Tiere im Wald kennen! #shorts #kidsvideo",
+            script_text="Heute besuchen wir das kleine Eichhoernchen und die Eule.",
+            duration_sec=32.0,
+            made_for_kids=True,
+            recent_titles=["Zaehl mit: Die Seifenblasen-Reime"],
+        )
+        rep_ok = evaluate_compliance(clean_kids, policy=policy)
+        self.assertTrue(rep_ok.passed, msg=f"Reasons: {rep_ok.reasons}")
+
+        bad_kids = SubmissionMetadata(
+            title="Zaehl mit: Die Seifenblasen-Reime",
+            caption="Kauf jetzt im Shop https://example.com mit Rabattcode! #shorts",
+            script_text="He picked up a gun in the forest.",
+            duration_sec=8.5,
+            made_for_kids=True,
+            recent_titles=["Zaehl mit: Die Seifenblasen-Reime"],
+        )
+        rep_bad = evaluate_compliance(bad_kids, policy=policy)
+        self.assertFalse(rep_bad.passed)
+        joined = " | ".join(rep_bad.reasons)
+        self.assertIn("duration_out_of_bounds", joined)
+        self.assertIn("duplicate_title", joined)
+        self.assertIn("blocked_terms_found", joined)
+        self.assertIn("kids_external_links_forbidden", joined)
+
+    def test_compliance_commercial_synthetic_and_remix_rules(self) -> None:
+        policy = CompliancePolicy(
+            require_synthetic_disclosure=True,
+            blocked_domains=["forbidden-example.de"],
+            require_imprint_reference=True,
+        )
+        bad_sub = SubmissionMetadata(
+            title="Top 3 Werkzeuge im Test",
+            caption="Hier bestellen: https://forbidden-example.de/shop?utm_source=reel",
+            script_text="Kurzer Satz ohne ausreichende eigene Kommentierung.",
+            duration_sec=25.0,
+            is_commercial=True,
+            paid_promotion_flag=False,
+            is_synthetic_media=True,
+            synthetic_disclosure_flag=False,
+            is_remix=True,
+            original_audio_replaced=False,
+            source_clip_count=1,
+        )
+        rep_bad = evaluate_compliance(bad_sub, policy=policy)
+        self.assertFalse(rep_bad.passed)
+        joined = " | ".join(rep_bad.reasons)
+        self.assertIn("missing_commercial_disclosure", joined)
+        self.assertIn("missing_synthetic_disclosure", joined)
+        self.assertIn("remix_unmodified_audio", joined)
+        self.assertIn("remix_insufficient_commentary", joined)
+        self.assertIn("remix_insufficient_clips", joined)
+        self.assertIn("blocked_domain_found", joined)
+        self.assertIn("missing_imprint_reference", joined)
+
+        good_sub = SubmissionMetadata(
+            title="Anzeige: Taktik-Analyse zum Spieltag",
+            caption="Anzeige | Analyse der drei Spielszenen. Impressum: Inhaber Arian Abdi",
+            script_text=(
+                "In dieser Szene sieht man deutlich wie die Viererkette bei Ballverlust "
+                "zu hoch steht und der Raum hinter den Aussenverteidigern komplett offen bleibt."
+            ),
+            duration_sec=45.0,
+            is_commercial=True,
+            paid_promotion_flag=True,
+            is_synthetic_media=True,
+            synthetic_disclosure_flag=True,
+            is_remix=True,
+            original_audio_replaced=True,
+            source_clip_count=5,
+        )
+        rep_good = evaluate_compliance(good_sub, policy=policy)
+        self.assertTrue(rep_good.passed, msg=f"Reasons: {rep_good.reasons}")
+
     def test_cli_end_to_end(self) -> None:
         policy_path = self.tmp_dir / "policy.json"
         rc_init = cli_main(["init-policy", str(policy_path), "--target-lufs", "-15.0"])
@@ -174,6 +254,26 @@ class TestReelGate(unittest.TestCase):
         self.assertEqual(rc_check_ok, 0)
         rep_data = json.loads(report_json.read_text(encoding="utf-8"))
         self.assertTrue(rep_data["passed"])
+
+        meta_json = self.tmp_dir / "sub.json"
+        meta_json.write_text(
+            json.dumps({
+                "title": "Barnaby und die Apfelernte",
+                "caption": "Kinderlied vom Bauernhof #shorts",
+                "script_text": "Heute helfen alle Freunde bei der grossen Apfelernte auf dem Sonnenhof.",
+                "duration_sec": 31.0,
+                "made_for_kids": True,
+            }),
+            encoding="utf-8",
+        )
+        comp_rep_json = self.tmp_dir / "comp_report.json"
+        rc_comp = cli_main([
+            "compliance",
+            str(meta_json),
+            "--report",
+            str(comp_rep_json),
+        ])
+        self.assertEqual(rc_comp, 0)
 
         db_path = self.tmp_dir / "cli_ledger.sqlite3"
         self.assertEqual(
